@@ -5,25 +5,28 @@ class DailyDevotion(db.Model):
     __tablename__ = 'daily_devotions'
 
     id = db.Column(db.Integer, primary_key=True)  # Unique identifier for each devotion
-    title = db.Column(db.String(255), nullable=False)  # Title of the devotion
-    content = db.Column(db.Text, nullable=False)  # Main content of the devotion
-    scripture_reference = db.Column(db.String(255), nullable=True)  # Optional scripture reference for the devotion
-    devotion_date = db.Column(db.Date, default=datetime.utcnow, nullable=False)  # Date for the devotion (defaults to today's date)
+    date = db.Column(db.Date, default=datetime.utcnow, nullable=False)  # Date for the devotion (defaults to today)
+    theme = db.Column(db.String(255), nullable=False)  # Theme of the devotion
+    scripture = db.Column(db.String(255), nullable=True)  # Scripture reference for the devotion
+    reflection = db.Column(db.Text, nullable=False)  # Reflection content of the devotion
+    prayer = db.Column(db.Text, nullable=False)  # Prayer related to the devotion
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Timestamp for creation
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # Timestamp for last update
 
-    def __init__(self, title, content, scripture_reference=None, devotion_date=None):
+    def __init__(self, theme, reflection, prayer, scripture=None, date=None):
         """
         Initialize a DailyDevotion object.
-        :param title: The title of the devotion.
-        :param content: The main content of the devotion.
-        :param scripture_reference: Optional; reference to a scripture for the devotion.
-        :param devotion_date: Optional; the date of the devotion (defaults to today).
+        :param theme: The theme of the devotion.
+        :param reflection: The reflection content of the devotion.
+        :param prayer: The prayer text for the devotion.
+        :param scripture: Optional; reference to a scripture for the devotion.
+        :param date: Optional; the date of the devotion (defaults to today).
         """
-        self.title = title
-        self.content = content
-        self.scripture_reference = scripture_reference
-        self.devotion_date = devotion_date if devotion_date else datetime.utcnow().date()
+        self.theme = theme
+        self.reflection = reflection
+        self.prayer = prayer
+        self.scripture = scripture
+        self.date = date if date else datetime.utcnow().date()
 
     def __repr__(self):
-        return f"<DailyDevotion {self.id}: {self.title} on {self.devotion_date}>"
+        return f"<DailyDevotion {self.id}: {self.theme} on {self.date}>"
