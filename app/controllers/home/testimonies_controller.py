@@ -30,7 +30,6 @@ def create_testimony():
             name = request.form.get('name')
             testimony_text = request.form.get('testimony_text')
             date_shared = request.form.get('date_shared')
-            title = request.form.get('title')  # Added title field
             
             if not name or not testimony_text:
                 return jsonify({"message": "Name and testimony text are required"}), 400
@@ -50,8 +49,7 @@ def create_testimony():
                 name=name,
                 testimony_text=testimony_text,
                 image_url=image_filename,  # Store just the filename
-                date_shared=date_shared,  # Optional; defaults to today's date
-                title=title  # Added title field
+                date_shared=date_shared  # Optional; defaults to today's date
             )
         else:
             # Handle JSON data without file
@@ -62,8 +60,7 @@ def create_testimony():
                 name=data.get('name'),
                 testimony_text=data.get('testimony_text'),
                 image_url=data.get('image_url'),  # This would be a URL, not a file
-                date_shared=data.get('date_shared'),  # Optional; defaults to today's date
-                title=data.get('title')  # Added title field
+                date_shared=data.get('date_shared')  # Optional; defaults to today's date
             )
 
         # Add to the session and commit to save it
@@ -97,8 +94,7 @@ def get_testimonies():
                     "image_url": testimony.image_url,  # Just return the filename
                     "date_shared": testimony.date_shared,
                     "created_at": testimony.created_at,
-                    "updated_at": testimony.updated_at,
-                    "title": testimony.title if hasattr(testimony, 'title') else None  # Added title field
+                    "updated_at": testimony.updated_at
                 })
 
             return jsonify(result)
@@ -123,8 +119,7 @@ def get_testimony(id):
                 "image_url": testimony.image_url,  # Just return the filename
                 "date_shared": testimony.date_shared,
                 "created_at": testimony.created_at,
-                "updated_at": testimony.updated_at,
-                "title": testimony.title if hasattr(testimony, 'title') else None  # Added title field
+                "updated_at": testimony.updated_at
             })
 
         return jsonify({"message": "Testimony not found"}), 404
@@ -150,8 +145,6 @@ def update_testimony(id):
                 testimony.testimony_text = request.form.get('testimony_text')
             if 'date_shared' in request.form:
                 testimony.date_shared = request.form.get('date_shared')
-            if 'title' in request.form and hasattr(testimony, 'title'):
-                testimony.title = request.form.get('title')
             
             # Handle image upload if present
             if 'image' in request.files:
@@ -174,8 +167,6 @@ def update_testimony(id):
             testimony.testimony_text = data.get('testimony_text', testimony.testimony_text)
             testimony.image_url = data.get('image_url', testimony.image_url)
             testimony.date_shared = data.get('date_shared', testimony.date_shared)
-            if 'title' in data and hasattr(testimony, 'title'):
-                testimony.title = data.get('title')
 
         # Commit changes to the database
         db.session.commit()
