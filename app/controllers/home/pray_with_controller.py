@@ -1,6 +1,12 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, Response, request, jsonify
 from app.models.home.pray_withs_model import PrayWith
 from app.extensions import db
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from flask import send_file
+from datetime import datetime
 
 # Create Blueprint for PrayWith routes
 pray_with_bp = Blueprint('pray_with', __name__, url_prefix='/api/v1/prayer_request')
@@ -124,3 +130,51 @@ def delete_prayer_request(id):
     except Exception as e:
         db.session.rollback()  # Rollback in case of error
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
+    
+    
+    
+    
+   # Download all prayer requests as PDF
+@pray_with_bp.route('/download', methods=['GET'])
+def download_prayer_requests():
+    try:
+        requests = PrayWith.query.order_by(PrayWith.date_submitted.desc()).all()
+        if not requests:
+            return jsonify({"message": "No prayer requests found"}), 404
+
+        # Create PDF in memory
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        normal = styles['Normal']
+        heading = styles['Heading1']
+
+        # Build PDF content
+        elements = []
+        elements.append(Paragraph("Prayer Requests", heading))
+        elements.append(Spacer(1, 12))
+
+        for req in requests:
+            elements.append(Paragraph(f"Name: {req.name}", normal))
+            elements.append(Paragraph(f"Contact: {req.contact}", normal))
+            elements.append(Paragraph(f"Request: {req.prayer_request}", normal))
+            if req.address:
+                elements.append(Paragraph(f"Address: {req.address}", normal))
+            elements.append(Paragraph(f"Submitted: {req.date_submitted.strftime('%B %d, %Y')}", normal))
+            elements.append(Spacer(1, 12))
+            elements.append(Paragraph("-" * 50, normal))
+            elements.append(Spacer(1, 12))
+
+        # Generate PDF
+        doc.build(elements)
+        buffer.seek(0)
+
+        # Send as download
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name="prayer_requests.pdf",
+            mimetype="application/pdf"
+        )
+    except Exception as e:
+        return jsonify({"message": "Error generating PDF", "error": str(e)}), 500

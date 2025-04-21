@@ -160,3 +160,9 @@ def update_event(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"message": str(e)}), 500
+
+
+
+
+
+

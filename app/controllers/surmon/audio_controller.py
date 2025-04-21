@@ -264,3 +264,28 @@ def delete_audio_sermon(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
+
+
+
+
+
+
+# Download an audio file
+@audio_sermons_bp.route('/download_audio/<int:id>', methods=['GET'])
+def download_audio(id):
+    try:
+        sermon = AudioSermon.query.get(id)
+        if sermon and os.path.exists(sermon.file_path):
+            # Extract the original filename without the timestamp prefix
+            filename = os.path.basename(sermon.file_path)
+            if '_' in filename:
+                filename = filename.split('_', 1)[1]  # Remove timestamp prefix
+            return send_file(
+                sermon.file_path,
+                as_attachment=True,
+                download_name=filename
+            )
+        else:
+            return jsonify({"message": "Audio sermon not found or file missing"}), 404
+    except Exception as e:
+        return jsonify({"message": "Error occurred", "error": str(e)}), 500
