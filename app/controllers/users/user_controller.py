@@ -1,99 +1,95 @@
-from flask import Blueprint, request, jsonify, make_response
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
+from flask import Blueprint, request, jsonify
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, get_jwt
 from app.models.users.users_model import User
-from app.models.users.subscribers import Subscriber
 from app.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import timedelta
+import traceback
+from sqlalchemy.exc import SQLAlchemyError
 
 # Create Blueprint for User routes
 users_bp = Blueprint('users', __name__, url_prefix='/api/v1/user')
-
-# Initialize JWTManager (configured in main app)
-jwt = JWTManager()
-
-# Blacklist for revoked tokens (in-memory for simplicity; use Redis in production)
-blacklist = set()
-
-@jwt.token_in_blocklist_loader
-def check_if_token_revoked(jwt_header, jwt_payload):
-    jti = jwt_payload['jti']
-    return jti in blacklist
-
-# Create a new user (Registration)
-@users_bp.route('/create_users', methods=['POST'])
-def create_user():
-    try:
-        data = request.get_json()
-
-        # Check if required fields are present
-        if not all(field in data for field in ('name', 'email', 'contact', 'password')):
-            return jsonify({"message": "Missing required fields"}), 400
-
-        # Ensure user does not already exist
-        existing_user = User.query.filter_by(email=data['email']).first()
-        if existing_user:
-            return jsonify({"message": "User with this email already exists"}), 400
-
-        # Create a new user
-        new_user = User(
-            name=data['name'],
-            email=data['email'],
-            contact=data['contact'],
-            password=data['password'],  # Password will be hashed inside the model
-            user_type=data.get('user_type', 'user')  # Default to 'user'
-        )
-        
-        db.session.add(new_user)
-        db.session.commit()
-
-        return jsonify({"message": "User created successfully", "user_id": new_user.id}), 201
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 # Login and issue JWT
 @users_bp.route('/login', methods=['POST'])
 def login():
     try:
+        # Parse JSON data
         data = request.get_json()
-        email = data.get('email')
-        password = data.get('password')
+        if not data:
+            print("No JSON data provided in request")
+            return jsonify({"message": "Invalid request: JSON data required"}), 400
 
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+
+        # Validate input
         if not email or not password:
+            print(f"Missing required fields: email={email}, password={'[provided]' if password else '[missing]'}")
             return jsonify({"message": "Email and password are required"}), 400
 
+        if '@' not in email:
+            print(f"Invalid email format: {email}")
+            return jsonify({"message": "Invalid email format"}), 400
+
+        # Query user
+        print(f"Querying user with email: {email}")
         user = User.query.filter_by(email=email).first()
-        if not user or not check_password_hash(user.password, password):
-            return jsonify({"message": "Invalid credentials"}), 401
 
-        # Create JWT with user info
+        if not user:
+            print(f"No user found with email: {email}")
+            return jsonify({"message": "Invalid email or password"}), 401
+
+        # Check password
+        print(f"Checking password for user: {email}")
+        print(f"Stored hash: {user.password[:30]}...")  # Log partial hash for security
+        if not check_password_hash(user.password, password):
+            print("Password verification failed")
+            return jsonify({"message": "Invalid email or password"}), 401
+
+        # Check user type
+        if user.user_type != 'admin':
+            print(f"User {email} is not an admin, user_type: {user.user_type}")
+            return jsonify({"message": "Admin access required"}), 403
+
+        # Create JWT
+        print(f"Generating JWT for user: {email}")
         identity = {'id': user.id, 'email': user.email, 'user_type': user.user_type}
-        access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=1))
+        try:
+            access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=1))
+            if not access_token:
+                raise ValueError("Failed to generate JWT")
+        except Exception as e:
+            print(f"JWT creation error: {str(e)}")
+            return jsonify({"message": "Failed to generate access token", "error": str(e)}), 500
 
-        # Set JWT in HTTP-only cookie
-        response = make_response(jsonify({
+        print(f"Login successful for user: {email}")
+        # Return token and user info
+        return jsonify({
             "message": "Login successful",
+            "access_token": access_token,
             "user": {
                 "id": user.id,
                 "name": user.name,
                 "email": user.email,
                 "user_type": user.user_type
             }
-        }))
-        response.set_cookie(
-            'access_token',
-            access_token,
-            httponly=True,
-            secure=True,  # Set to False for local development without HTTPS
-            samesite='Strict',
-            max_age=3600  # 1 hour
-        )
-        return response, 200
+        }), 200
+
+    except SQLAlchemyError as e:
+        print(f"Database error during login: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({"message": "Database error occurred", "error": str(e)}), 500
+
+    except ValueError as e:
+        print(f"Validation error during login: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({"message": "Validation error", "error": str(e)}), 400
 
     except Exception as e:
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
+        print(f"Unexpected login error: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({"message": "An unexpected error occurred", "error": str(e)}), 500
 
 # Logout and revoke JWT
 @users_bp.route('/logout', methods=['POST'])
@@ -101,12 +97,26 @@ def login():
 def logout():
     try:
         jti = get_jwt()['jti']
-        blacklist.add(jti)  # Add token to blacklist
-        response = make_response(jsonify({"message": "Logged out successfully"}))
-        response.set_cookie('access_token', '', expires=0, httponly=True, secure=True, samesite='Strict')
-        return response, 200
+        if not jti:
+            print("No JTI found in JWT")
+            return jsonify({"message": "Invalid token: JTI missing"}), 400
+
+        from app import blacklist  # Import blacklist from __init__.py
+        print(f"Revoking token with JTI: {jti}")
+        blacklist.add(jti)
+
+        print(f"Token revoked successfully: {jti}")
+        return jsonify({"message": "Logged out successfully"}), 200
+
+    except KeyError as e:
+        print(f"JWT parsing error during logout: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({"message": "Invalid token structure", "error": str(e)}), 400
+
     except Exception as e:
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
+        print(f"Unexpected logout error: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({"message": "An error occurred during logout", "error": str(e)}), 500
 
 # Protected dashboard endpoint
 @users_bp.route('/dashboard', methods=['GET'])
@@ -114,86 +124,26 @@ def logout():
 def dashboard():
     try:
         current_user = get_jwt_identity()
+        if not current_user:
+            print("No user identity found in JWT")
+            return jsonify({"message": "Invalid token: No user identity"}), 401
+
+        print(f"Accessing dashboard for user: {current_user.get('email', 'unknown')}")
         if current_user['user_type'] != 'admin':
+            print(f"User {current_user['email']} is not an admin, user_type: {current_user['user_type']}")
             return jsonify({"message": "Unauthorized: Admin access required"}), 403
+
         return jsonify({
             "message": "Welcome to the admin dashboard",
             "user": current_user
         }), 200
+
+    except KeyError as e:
+        print(f"JWT identity error during dashboard access: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({"message": "Invalid user data in token", "error": str(e)}), 400
+
     except Exception as e:
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
-
-# Get user details by id
-@users_bp.route('/get_users/<int:id>', methods=['GET'])
-@jwt_required()
-def get_user(id):
-    try:
-        current_user = get_jwt_identity()
-        user = User.query.get(id)
-        if not user:
-            return jsonify({"message": "User not found"}), 404
-        if current_user['user_type'] != 'admin' and current_user['id'] != id:
-            return jsonify({"message": "Unauthorized: Cannot access other users' data"}), 403
-        return jsonify({
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "contact": user.contact,
-            "user_type": user.user_type,
-            "notes": user.notes
-        })
-    except Exception as e:
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
-
-# Update user information
-@users_bp.route('/update_users/<int:id>', methods=['PUT'])
-@jwt_required()
-def update_user(id):
-    try:
-        current_user = get_jwt_identity()
-        user = User.query.get(id)
-        if not user:
-            return jsonify({"message": "User not found"}), 404
-        if current_user['user_type'] != 'admin' and current_user['id'] != id:
-            return jsonify({"message": "Unauthorized: Cannot update other users' data"}), 403
-
-        data = request.get_json()
-        if 'name' in data:
-            user.name = data['name']
-        if 'email' in data:
-            user.email = data['email']
-        if 'contact' in data:
-            user.contact = data['contact']
-        if 'password' in data:
-            user.set_password(data['password'])
-        if 'user_type' in data and current_user['user_type'] == 'admin':
-            user.user_type = data['user_type']
-        if 'notes' in data:
-            user.notes = data['notes']
-
-        db.session.commit()
-        return jsonify({"message": "User updated successfully"})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
-
-# Delete a user
-@users_bp.route('/delete_users/<int:id>', methods=['DELETE'])
-@jwt_required()
-def delete_user(id):
-    try:
-        current_user = get_jwt_identity()
-        if current_user['user_type'] != 'admin':
-            return jsonify({"message": "Unauthorized: Admin access required"}), 403
-
-        user = User.query.get(id)
-        if not user:
-            return jsonify({"message": "User not found"}), 404
-
-        db.session.delete(user)
-        db.session.commit()
-        return jsonify({"message": "User deleted successfully"})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"message": "Error occurred", "error": str(e)}), 500
-
+        print(f"Unexpected dashboard error: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({"message": "An error occurred accessing dashboard", "error": str(e)}), 500
