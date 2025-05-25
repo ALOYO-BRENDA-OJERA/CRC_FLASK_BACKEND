@@ -14,6 +14,7 @@ from app.controllers.home.word_of_the_month_controller import word_of_month_bp
 from app.controllers.home.pray_with_controller import pray_with_bp
 from app.controllers.about.branch_event_controller import branch_event_bp
 from app.controllers.users.feedback_controller import feedback_bp
+from app.controllers.rhema.application_controller import application_bp
 from flask_swagger_ui import get_swaggerui_blueprint
 from dotenv import load_dotenv
 
@@ -58,6 +59,7 @@ def create_app():
     app.register_blueprint(pray_with_bp)
     app.register_blueprint(branch_event_bp)
     app.register_blueprint(feedback_bp)
+    app.register_blueprint(application_bp)
 
     # Swagger UI setup
     SWAGGER_URL = '/swagger'
@@ -79,5 +81,14 @@ def create_app():
     def seed_admin_command():
         from seeds.seed_admin import seed_admin
         seed_admin()
+        
+          # Add security headers to every response
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Frame-Options'] = 'DENY'  # Prevent clickjacking
+        response.headers['X-Content-Type-Options'] = 'nosniff'  # Prevent MIME sniffing
+        response.headers['Referrer-Policy'] = 'no-referrer'  # No referrer info shared
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'  # Force HTTPS
+        return response
 
     return app

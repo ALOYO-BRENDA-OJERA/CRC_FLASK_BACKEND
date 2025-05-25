@@ -10,7 +10,9 @@ from sqlalchemy.exc import SQLAlchemyError
 # Create Blueprint for User routes
 users_bp = Blueprint('users', __name__, url_prefix='/api/v1/user')
 
-# Login and issue JWT
+
+
+
 @users_bp.route('/login', methods=['POST'])
 def login():
     try:
@@ -52,11 +54,11 @@ def login():
             print(f"User {email} is not an admin, user_type: {user.user_type}")
             return jsonify({"message": "Admin access required"}), 403
 
-        # Create JWT
+        # Create JWT with 20-minute expiration
         print(f"Generating JWT for user: {email}")
         identity = {'id': user.id, 'email': user.email, 'user_type': user.user_type}
         try:
-            access_token = create_access_token(identity=identity, expires_delta=timedelta(hours=1))
+            access_token = create_access_token(identity=identity, expires_delta=timedelta(minutes=20))  # Changed to 20 minutes
             if not access_token:
                 raise ValueError("Failed to generate JWT")
         except Exception as e:
@@ -90,6 +92,10 @@ def login():
         print(f"Unexpected login error: {str(e)}")
         print(f"Full traceback: {traceback.format_exc()}")
         return jsonify({"message": "An unexpected error occurred", "error": str(e)}), 500
+    
+    
+    
+    
 
 # Logout and revoke JWT
 @users_bp.route('/logout', methods=['POST'])
