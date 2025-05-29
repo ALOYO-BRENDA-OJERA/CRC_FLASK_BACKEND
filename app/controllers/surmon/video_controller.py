@@ -280,16 +280,19 @@
 
 
 
-
 from flask import Blueprint, request, jsonify, send_from_directory, send_file, Response, render_template
 from app.models.Surmon.videos_model import VideoSermon
 from app.extensions import db
 from werkzeug.utils import secure_filename
 from googleapiclient.discovery import build
-from google.oauth2 import service_account
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -312,27 +315,30 @@ def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 # YouTube API configuration
-SERVICE_ACCOUNT_FILE = os.environ.get('SERVICE_ACCOUNT_FILE', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'config', 'service_account.json'))
-CHANNEL_ID = os.environ.get('YOUTUBE_CHANNEL_ID', 'YOUR_CHURCH_CHANNEL_ID')  # Replace with your church's channel ID or set in .env
 YOUTUBE_API_SERVICE_NAME = 'youtube'
 YOUTUBE_API_VERSION = 'v3'
+API_KEY = os.environ.get('YOUTUBE_API_KEY')
+CHANNEL_ID = os.environ.get('YOUTUBE_CHANNEL_ID')
 
 def get_youtube_videos():
     try:
-        # Load service account credentials
-        credentials = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE,
-            scopes=['https://www.googleapis.com/auth/youtube.readonly']
-        )
+        logger.debug(f"Using API key: {API_KEY}")
+        logger.debug(f"Fetching videos for channel ID: {CHANNEL_ID}")
+        
+        if not API_KEY:
+            raise ValueError("YouTube API key not set")
+        if not CHANNEL_ID:
+            raise ValueError("YouTube channel ID not set")
 
-        # Initialize YouTube API client with credentials
-        youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, credentials=credentials)
+        # Initialize YouTube API client with API key
+        youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=API_KEY)
 
         # Get the channel's uploads playlist ID
         request = youtube.channels().list(part='contentDetails', id=CHANNEL_ID)
         response = request.execute()
 
-        if not response['items']:
+        if not response.get('items'):
+            logger.warning(f"No channel found for ID: {CHANNEL_ID}")
             return []
 
         uploads_playlist_id = response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
@@ -360,10 +366,11 @@ def get_youtube_videos():
                 'published_at': item['snippet']['publishedAt']
             })
 
+        logger.debug(f"Fetched {len(videos)} videos")
         return videos
 
     except Exception as e:
-        print(f"Error fetching YouTube videos: {e}")
+        logger.error(f"Error fetching YouTube videos: {e}", exc_info=True)
         return []
 
 # Serve thumbnail images
@@ -404,7 +411,7 @@ def stream_video(id):
             }
         )
     except Exception as e:
-        print(f"Error streaming video: {str(e)}")
+        logger.error(f"Error streaming video: {str(e)}", exc_info=True)
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 # Create a new video sermon
@@ -471,6 +478,7 @@ def create_video_sermon():
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Error creating video sermon: {e}", exc_info=True)
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 # Get all video sermons
@@ -488,6 +496,7 @@ def list_video_sermons():
             "preacher": sermon.preacher
         } for sermon in sermons])
     except Exception as e:
+        logger.error(f"Error listing video sermons: {e}", exc_info=True)
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 # Get a video sermon by id
@@ -510,6 +519,7 @@ def get_video_sermon(id):
         else:
             return jsonify({"message": "Video sermon not found"}), 404
     except Exception as e:
+        logger.error(f"Error fetching video sermon: {e}", exc_info=True)
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 # Update a video sermon by id
@@ -535,7 +545,7 @@ def update_video_sermon(id):
                 try:
                     os.remove(sermon.file_path)
                 except Exception as e:
-                    print(f"Error deleting old video file: {e}")
+                    logger.error(f"Error deleting old video file: {e}", exc_info=True)
             
             # Save new video file
             video_filename = secure_filename(video_file.filename)
@@ -555,7 +565,7 @@ def update_video_sermon(id):
                     try:
                         os.remove(old_thumbnail_path)
                     except Exception as e:
-                        print(f"Error deleting old thumbnail: {e}")
+                        logger.error(f"Error deleting old thumbnail: {e}", exc_info=True)
             
             # Save new thumbnail
             thumbnail_filename = secure_filename(thumbnail_file.filename)
@@ -586,6 +596,7 @@ def update_video_sermon(id):
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Error updating video sermon: {e}", exc_info=True)
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 # Delete a video sermon by id
@@ -601,7 +612,7 @@ def delete_video_sermon(id):
             try:
                 os.remove(sermon.file_path)
             except Exception as e:
-                print(f"Error deleting video file: {e}")
+                logger.error(f"Error deleting video file: {e}", exc_info=True)
 
         # Delete the thumbnail if it exists
         if sermon.thumbnail_path:
@@ -610,7 +621,7 @@ def delete_video_sermon(id):
                 try:
                     os.remove(thumbnail_path)
                 except Exception as e:
-                    print(f"Error deleting thumbnail: {e}")
+                    logger.error(f"Error deleting thumbnail: {e}", exc_info=True)
 
         db.session.delete(sermon)
         db.session.commit()
@@ -619,12 +630,15 @@ def delete_video_sermon(id):
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Error deleting video sermon: {e}", exc_info=True)
         return jsonify({"message": "Error occurred", "error": str(e)}), 500
 
 # Fetch YouTube videos dynamically
 @video_sermons_bp.route('/youtube_videos', methods=['GET'])
 def get_youtube_videos_route():
-    videos = get_youtube_videos()
-    if not videos:
-        return jsonify({"message": "Unable to fetch YouTube videos", "error": "API error or no videos found"}), 500
-    return jsonify({"videos": videos}), 200
+    try:
+        videos = get_youtube_videos()
+        return jsonify({"videos": videos}), 200
+    except Exception as e:
+        logger.error(f"Error in youtube_videos route: {e}", exc_info=True)
+        return jsonify({"message": "Unable to fetch YouTube videos", "error": str(e)}), 500
