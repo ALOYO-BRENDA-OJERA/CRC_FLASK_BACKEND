@@ -24,7 +24,7 @@ def create_app():
     app = Flask(__name__)
 
     # Flask and database configuration
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost/CRC_system'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://twhgdmijufqepffu:PwW%3Cj%2BZdCEAPhny8SGppbPhEVWK5MQ%3CV@102.134.147.233:32764/nydmvxboekldqtghkqsbkybh'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = 'your_secret_key'
     app.config['JWT_SECRET_KEY'] = 'your_jwt_secret_key'

@@ -14,3 +14,6 @@ class RhemaBlog(db.Model):
 
     def __repr__(self):
         return f'<RhemaBlog {self.title}>'
+    
+    
+    # sqlalchemy.url = mysql+pymysql://root:@localhost/CRC_system
