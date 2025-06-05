@@ -120,7 +120,8 @@ def create_app():
     app = Flask(__name__)
 
     # Flask and database configuration
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://twhgdmijufqepffu:PwW%3Cj%2BZdCEAPhny8SGppbPhEVWK5MQ%3CV@102.134.147.233:32764/nydmvxboekldqtghkqsbkybh'
+    app.config['SQLALCHEMY_DATABASE_URI'] =   'postgresql://crc_system_user:7qf5LUDILR9VD2528SYi77vWkEfBjjoK@dpg-d10pedi4d50c73b1v1l0-a.oregon-postgres.render.com/crc_system'
+
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = 'your_secret_key'
     app.config['JWT_SECRET_KEY'] = 'your_jwt_secret_key'
@@ -138,6 +139,7 @@ def create_app():
     cors.init_app(app, resources={r"/api/v1/*": {"origins": "http://localhost:3000"}}, supports_credentials=True)
     jwt.init_app(app)
     scheduler.init_app(app)
+
 
     # Register blueprints
     app.register_blueprint(users_bp)
