@@ -5,7 +5,7 @@ class Config:
     CORS_ORIGINS = "http://localhost:3000"  # For CORS
 
     # Updated for Render PostgreSQL DB
-    SQLALCHEMY_DATABASE_URI = 'postgresql://crc_system_user:7qf5LUDILR9VD2528SYi77vWkEfBjjoK@dpg-d10pedi4d50c73b1v1l0-a.oregon-postgres.render.com/crc_system'
+    SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI = "mysql+pymysql://aimugorg_DATABASE_ADMIN:AIM-crc2025@localhost/aimugorg_CRC_SYSTEM"
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     JWT_SECRET_KEY = 'your_jwt_secret_key'  # For Flask-JWT-Extended

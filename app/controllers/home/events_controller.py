@@ -165,4 +165,25 @@ def update_event(id):
 
 
 
-
+# --- NEW ENDPOINT FOR PUBLIC EVENTS ---
+@event_bp.route('/get_public_events', methods=['GET'])
+def get_public_events():
+    """
+    Retrieves all events ordered by date (oldest first)
+    This endpoint is intended for public-facing display.
+    """
+    try:
+        # Order by date ascending to show upcoming or past events chronologically
+        events = Event.query.order_by(Event.date.asc()).all() 
+        return jsonify([{
+            "id": event.id,
+            "banner_image": event.banner_image,
+            "title": event.title,
+            "description": event.description,
+            "date": str(event.date),
+            "created_at": str(event.created_at)
+        } for event in events])
+        
+    except Exception as e:
+        return jsonify({"message": str(e)}), 500
+# --- END NEW ENDPOINT ---
